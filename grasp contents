@@ -1,0 +1,55 @@
+function applyLabelToEmails() {
+  var openaiApiKey = 'YOUR_OPENAI_API_KEY';
+  
+  // ラベルが付いていないメールを取得
+  var threads = GmailApp.search('in:inbox -has:userlabels', 0, 100); // 最初の100件のスレッドを取得
+
+  for (var i = 0; i < threads.length; i++) {
+    var thread = threads[i];
+    var messages = thread.getMessages();
+    for (var j = 0; j < messages.length; j++) {
+      var message = messages[j];
+      if (message) {
+        var content = message.getPlainBody();
+
+        var apiUrl = 'https://api.openai.com/v1/engines/davinci/completions';
+        var payload = {
+          'prompt': 'このメールの内容に最も適切なラベルは何ですか？\n\n' + content + '\n\nラベル:',
+          'max_tokens': 50
+        };
+        
+        var headers = {
+          'Authorization': 'Bearer ' + openaiApiKey,
+          'Content-Type': 'application/json'
+        };
+
+        var options = {
+          'method': 'post',
+          'headers': headers,
+          'payload': JSON.stringify(payload),
+          'muteHttpExceptions': true
+        };
+
+        var response = UrlFetchApp.fetch(apiUrl, options);
+        if (response.getResponseCode() == 200) {
+            var jsonResponse = JSON.parse(response.getContentText());
+            
+            if (jsonResponse.choices && jsonResponse.choices.length > 0) {
+              var labelName = jsonResponse.choices[0].text.trim();
+
+              // ラベルをメールに適用
+              var label = GmailApp.getUserLabelByName(labelName);
+              if (!label) {
+                label = GmailApp.createLabel(labelName);
+              }
+              message.addLabel(label);
+            } else {
+              console.log("OpenAIからのレスポンスにchoicesが含まれていません。");
+            }
+        } else {
+            console.log("OpenAI APIからのエラーレスポンス: ", response.getContentText());
+        }
+      }
+    }
+  }
+}
